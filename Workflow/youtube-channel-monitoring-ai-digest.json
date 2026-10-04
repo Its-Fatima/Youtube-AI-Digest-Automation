@@ -1,0 +1,410 @@
+{
+  "name": "YouTube Channel Monitoring & AI Video Digest Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 21
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        -544
+      ],
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/youtube/v3/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "snippet"
+            },
+            {
+              "name": "channelId",
+              "value": "={{ $json.channelId }}"
+            },
+            {
+              "name": "order",
+              "value": "date"
+            },
+            {
+              "name": "type",
+              "value": "video"
+            },
+            {
+              "name": "maxResults",
+              "value": "10"
+            },
+            {
+              "name": "key",
+              "value": "YOUR_YOUTUBE_API_KEY"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        448,
+        -544
+      ],
+      "name": "GetVideos"
+    },
+    {
+      "parameters": {
+        "jsCode": "const outputs = [];\n\nfor (const item of $input.all()) {\n  const videos = item.json.items || [];\n\n  for (const video of videos) {\n    outputs.push({\n      json: {\n        videoId: video.id.videoId,\n        title: video.snippet.title,\n        publishedAt: video.snippet.publishedAt,\n        channelId: video.snippet.channelId,\n        channelName: video.snippet.channelTitle,\n        url: `https://www.youtube.com/watch?v=${video.id.videoId}`\n      }\n    });\n  }\n}\n\nreturn outputs;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        -544
+      ],
+      "name": "SplitVideos"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.publishedAt }}",
+              "rightValue": "={{ $now.minus({ hours: 24 }).toISO() }}",
+              "operator": {
+                "type": "dateTime",
+                "operation": "after"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        896,
+        -544
+      ],
+      "name": "Last24Hours"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  const summary =\n    item.json.candidates?.[0]?.content?.parts?.[0]?.text ?? '';\n\n  return {\n    json: {\n      summary: summary.trim()\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        -736
+      ],
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "Channel-Name",
+              "value": "={{ $('SplitVideos').item.json.channelName }}",
+              "type": "string"
+            },
+            {
+              "name": "Video-Title",
+              "value": "={{ $('SplitVideos').item.json.title }}",
+              "type": "string"
+            },
+            {
+              "name": "url",
+              "value": "={{ $('SplitVideos').item.json.url }}",
+              "type": "string"
+            },
+            {
+              "name": "PublishedAt",
+              "value": "={{ $('SplitVideos').item.json.publishedAt }}",
+              "type": "string"
+            },
+            {
+              "name": "Summary",
+              "value": "={{ $json.summary }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1568,
+        -736
+      ],
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      channelId: 'YOUR_YOUTUBE_CHANNEL_ID'\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        -544
+      ],
+      "name": "ChannelList"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1120,
+        -544
+      ],
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "amount": 20
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1360,
+        -400
+      ],
+      "name": "Wait"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "YOUR_GEMINI_API_KEY"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-goog-api-key",
+              "value": "YOUR_GEMINI_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"Watch this YouTube video and describe what actually happens in it. Do not produce a word-for-word transcript. Write one concise paragraph of approximately 100-150 words. Focus on the main topics discussed, events, claims, demonstrations, and important information presented. Do not invent anything that is not in the video. Video title: {{$json.title}}\"\n        },\n        {\n          \"fileData\": {\n            \"fileUri\": \"{{$json.url}}\",\n            \"mimeType\": \"video/*\"\n          }\n        }\n      ]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1568,
+        -400
+      ],
+      "name": "AnalyzeVideo",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "sendDocument",
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "binaryData": true,
+        "additionalFields": {
+          "caption": "=📺 YouTube Daily Digest\n\nVideos published in the last 24 hours across your monitored channels.\n\n📊 Videos found: {{ $('Last24Hours').all().length }}\n🤖 AI summaries included for each video.\n\n📎 See the attached Excel file for the full digest."
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2016,
+        -736
+      ],
+      "name": "Send a document"
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "options": {
+          "fileName": "YoutubeChannelSummary"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        -736
+      ],
+      "name": "Convert to XLSX"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "ChannelList",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GetVideos": {
+      "main": [
+        [
+          {
+            "node": "SplitVideos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SplitVideos": {
+      "main": [
+        [
+          {
+            "node": "Last24Hours",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Last24Hours": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Convert to XLSX",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ChannelList": {
+      "main": [
+        [
+          {
+            "node": "GetVideos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "AnalyzeVideo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AnalyzeVideo": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to XLSX": {
+      "main": [
+        [
+          {
+            "node": "Send a document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "tags": []
+}
