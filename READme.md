@@ -3,6 +3,7 @@
 An **n8n workflow** that automatically monitors selected YouTube channels and creates a daily AI-powered digest of newly published videos.
 
 ## What It Does
+![YouTube Automation](Screenshots/youtubeautomation.png)
 
 The workflow runs automatically every day and:
 
@@ -21,7 +22,7 @@ The workflow runs automatically every day and:
 
 ## Workflow
 
-
+![YouTube Digest Flow](Screenshots/youtube_digest_flow.png)
 
 ## Technologies Used
 
